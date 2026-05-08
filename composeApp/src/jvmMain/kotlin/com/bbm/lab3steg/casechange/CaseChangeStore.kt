@@ -12,17 +12,24 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.bbm.lab3steg.utils.performGammaArithmetic
 
 data class CaseChangeState(
     val containerText: String = "",
     val secretText: String = "",
-    val outputText: String = ""
+    val outputText: String = "",
+    val useGamma: Boolean = false,
+    val gammaKey: String = "",
+    val gammaLanguage: String = "Ukrainian",
+    val gammaFormula: String = "S = Г + О"
 ) : ViewState
 
 sealed class CaseChangeIntent : ViewIntent {
     data class UpdateContainerText(val text: String) : CaseChangeIntent()
     data class UpdateSecretText(val text: String) : CaseChangeIntent()
     data class UpdateOutputText(val text: String) : CaseChangeIntent()
+    data class UpdateUseGamma(val use: Boolean) : CaseChangeIntent()
+    data class UpdateGammaKey(val text: String) : CaseChangeIntent()
     object Encode : CaseChangeIntent()
     object Decode : CaseChangeIntent()
 }
@@ -43,6 +50,8 @@ class CaseChangeStore(private val coroutineScope: CoroutineScope) : Store<CaseCh
             is CaseChangeIntent.UpdateContainerText -> _state.update { it.copy(containerText = intent.text) }
             is CaseChangeIntent.UpdateSecretText -> _state.update { it.copy(secretText = intent.text) }
             is CaseChangeIntent.UpdateOutputText -> _state.update { it.copy(outputText = intent.text) }
+            is CaseChangeIntent.UpdateUseGamma -> _state.update { it.copy(useGamma = intent.use) }
+            is CaseChangeIntent.UpdateGammaKey -> _state.update { it.copy(gammaKey = intent.text) }
             CaseChangeIntent.Encode -> encodeText()
             CaseChangeIntent.Decode -> decodeText()
         }
@@ -51,17 +60,26 @@ class CaseChangeStore(private val coroutineScope: CoroutineScope) : Store<CaseCh
     private fun encodeText() {
         val st = _state.value
         val container = st.containerText
-        val secret = st.secretText
+        val originalSecret = st.secretText
 
-        if (container.isEmpty() || secret.isEmpty()) {
+        if (container.isEmpty() || originalSecret.isEmpty()) {
             emitEffect(CaseChangeEffect.ShowMessage("Контейнер або повідомлення порожні"))
             return
+        }
+
+        val secret = if (st.useGamma) {
+            if (st.gammaKey.isEmpty()) {
+                emitEffect(CaseChangeEffect.ShowMessage("Ключ гамування порожній"))
+                return
+            }
+            performGammaArithmetic(originalSecret, st.gammaKey, st.gammaLanguage, st.gammaFormula, true)
+        } else {
+            originalSecret
         }
 
         val binarySecret = secret.toByteArray(Charsets.UTF_8).joinToString("") { byte ->
             byte.toUByte().toString(2).padStart(8, '0')
         }
-        // Додамо нульовий байт в кінці, щоб знати, де закінчується повідомлення
         val binaryFull = binarySecret + "00000000"
 
         val lettersCount = container.count { it.isLetter() }
@@ -120,12 +138,21 @@ class CaseChangeStore(private val coroutineScope: CoroutineScope) : Store<CaseCh
             for (chunk in chunks) {
                 val byteVal = chunk.toInt(2).toByte()
                 if (byteVal == 0.toByte()) {
-                    break // Знайшли маркер кінця
+                    break
                 }
                 bytesList.add(byteVal)
             }
 
-            val decodedSecret = String(bytesList.toByteArray(), Charsets.UTF_8)
+            val decodedSecretBytes = String(bytesList.toByteArray(), Charsets.UTF_8)
+            val decodedSecret = if (st.useGamma) {
+                if (st.gammaKey.isEmpty()) {
+                    emitEffect(CaseChangeEffect.ShowMessage("Для декодування потрібен ключ"))
+                    return
+                }
+                performGammaArithmetic(decodedSecretBytes, st.gammaKey, st.gammaLanguage, st.gammaFormula, false)
+            } else {
+                decodedSecretBytes
+            }
             _state.update { it.copy(secretText = decodedSecret) }
             emitEffect(CaseChangeEffect.ShowMessage("Успішно декодовано"))
         } catch (e: Exception) {

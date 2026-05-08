@@ -11,17 +11,24 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.bbm.lab3steg.utils.performGammaArithmetic
 
 data class SpaceManipState(
     val containerText: String = "",
     val secretText: String = "",
-    val outputText: String = ""
+    val outputText: String = "",
+    val useGamma: Boolean = false,
+    val gammaKey: String = "",
+    val gammaLanguage: String = "Ukrainian",
+    val gammaFormula: String = "S = Г + О"
 ) : ViewState
 
 sealed class SpaceManipIntent : ViewIntent {
     data class UpdateContainerText(val text: String) : SpaceManipIntent()
     data class UpdateSecretText(val text: String) : SpaceManipIntent()
     data class UpdateOutputText(val text: String) : SpaceManipIntent()
+    data class UpdateUseGamma(val use: Boolean) : SpaceManipIntent()
+    data class UpdateGammaKey(val text: String) : SpaceManipIntent()
     object Encode : SpaceManipIntent()
     object Decode : SpaceManipIntent()
 }
@@ -42,6 +49,8 @@ class SpaceManipStore(private val coroutineScope: CoroutineScope) : Store<SpaceM
             is SpaceManipIntent.UpdateContainerText -> _state.update { it.copy(containerText = intent.text) }
             is SpaceManipIntent.UpdateSecretText -> _state.update { it.copy(secretText = intent.text) }
             is SpaceManipIntent.UpdateOutputText -> _state.update { it.copy(outputText = intent.text) }
+            is SpaceManipIntent.UpdateUseGamma -> _state.update { it.copy(useGamma = intent.use) }
+            is SpaceManipIntent.UpdateGammaKey -> _state.update { it.copy(gammaKey = intent.text) }
             SpaceManipIntent.Encode -> encodeText()
             SpaceManipIntent.Decode -> decodeText()
         }
@@ -50,12 +59,20 @@ class SpaceManipStore(private val coroutineScope: CoroutineScope) : Store<SpaceM
     private fun encodeText() {
         val st = _state.value
         val container = st.containerText
-        val secret = st.secretText
+        val originalSecret = st.secretText
 
-        if (container.isEmpty() || secret.isEmpty()) {
+        if (container.isEmpty() || originalSecret.isEmpty()) {
             emitEffect(SpaceManipEffect.ShowMessage("Контейнер або повідомлення порожні"))
             return
         }
+
+        val secret = if (st.useGamma) {
+            if (st.gammaKey.isEmpty()) {
+                emitEffect(SpaceManipEffect.ShowMessage("Ключ гамування порожній"))
+                return
+            }
+            performGammaArithmetic(originalSecret, st.gammaKey, st.gammaLanguage, st.gammaFormula, true)
+        } else originalSecret
 
         val binarySecret = secret.toByteArray(Charsets.UTF_8).joinToString("") { byte ->
             byte.toUByte().toString(2).padStart(8, '0')
@@ -101,7 +118,7 @@ class SpaceManipStore(private val coroutineScope: CoroutineScope) : Store<SpaceM
             if (encodedText[i] == ' ') {
                 if (i + 1 < encodedText.length && encodedText[i + 1] == ' ') {
                     binaryBuilder.append('1')
-                    i++ // Пропускаємо другий пробіл
+                    i++
                 } else {
                     binaryBuilder.append('0')
                 }
@@ -133,7 +150,14 @@ class SpaceManipStore(private val coroutineScope: CoroutineScope) : Store<SpaceM
                 bytesList.add(byteVal)
             }
 
-            val decodedSecret = String(bytesList.toByteArray(), Charsets.UTF_8)
+            val decodedSecretBytes = String(bytesList.toByteArray(), Charsets.UTF_8)
+            val decodedSecret = if (st.useGamma) {
+                if (st.gammaKey.isEmpty()) {
+                    emitEffect(SpaceManipEffect.ShowMessage("Для декодування потрібен ключ"))
+                    return
+                }
+                performGammaArithmetic(decodedSecretBytes, st.gammaKey, st.gammaLanguage, st.gammaFormula, false)
+            } else decodedSecretBytes
             _state.update { it.copy(secretText = decodedSecret) }
             emitEffect(SpaceManipEffect.ShowMessage("Успішно декодовано"))
         } catch (e: Exception) {

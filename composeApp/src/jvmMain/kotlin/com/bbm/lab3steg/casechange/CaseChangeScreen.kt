@@ -1,8 +1,11 @@
 package com.bbm.lab3steg.casechange
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.vinceglb.filekit.compose.rememberFileSaverLauncher
@@ -50,14 +53,15 @@ fun CaseChangeScreen(store: CaseChangeStore, snackbarHostState: SnackbarHostStat
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         OutlinedTextField(
             value = state.containerText,
             onValueChange = { store.sendIntent(CaseChangeIntent.UpdateContainerText(it)) },
             label = { Text("Контейнер (оригінальний текст)") },
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().height(150.dp),
             maxLines = 10
         )
 
@@ -65,7 +69,7 @@ fun CaseChangeScreen(store: CaseChangeStore, snackbarHostState: SnackbarHostStat
             value = state.secretText,
             onValueChange = { store.sendIntent(CaseChangeIntent.UpdateSecretText(it)) },
             label = { Text("Секретне повідомлення") },
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().height(150.dp),
             maxLines = 10
         )
 
@@ -80,7 +84,7 @@ fun CaseChangeScreen(store: CaseChangeStore, snackbarHostState: SnackbarHostStat
             onValueChange = {},
             readOnly = true,
             label = { Text("Секретне повідомлення (бінарний вигляд)") },
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().height(150.dp),
             maxLines = 10
         )
 
@@ -100,7 +104,7 @@ fun CaseChangeScreen(store: CaseChangeStore, snackbarHostState: SnackbarHostStat
             value = state.outputText,
             onValueChange = { store.sendIntent(CaseChangeIntent.UpdateOutputText(it)) },
             label = { Text("Результат (змінений регістр)") },
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxWidth().height(150.dp),
             maxLines = 10
         )
 
@@ -122,6 +126,23 @@ fun CaseChangeScreen(store: CaseChangeStore, snackbarHostState: SnackbarHostStat
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Відкрити файл для декодування")
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = state.useGamma,
+                onCheckedChange = { store.sendIntent(CaseChangeIntent.UpdateUseGamma(it)) }
+            )
+            Text("Використовувати гамування перед приховуванням")
+        }
+
+        if (state.useGamma) {
+            OutlinedTextField(
+                value = state.gammaKey,
+                onValueChange = { store.sendIntent(CaseChangeIntent.UpdateGammaKey(it)) },
+                label = { Text("Ключ гамування") },
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
